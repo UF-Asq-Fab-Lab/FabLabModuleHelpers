@@ -1,0 +1,352 @@
+<?php
+/**
+ * InfinityFab Lab User Extensions Module
+ *
+ * Developed for the Infinity Fab Lab at the University of Florida.
+ * Root Module that handles installing, uninstalling and hooking together
+ * the child modules for the Lab User extensions. Login, registration, account
+ * management are all covered.
+ *
+ * Thomas R Storey, 2015
+ * Licensed under MIT License, see LICENSE.TXT
+ *
+ * http://fablab.arts.ufl.edu
+ * https://github.com/UF-Asq-Fab-Lab
+ * sudo rm -R /var/www/html/sandbox/fablab/site/modules/FabLabModuleHelpers && sudo cp -R FabLabModuleHelpers /var/www/html/sandbox/fablab/site/modules/FabLabModuleHelpers
+ */
+
+class FabLabModuleHelpers extends WireData implements Module {
+
+  public static function getModuleInfo(){
+    return array(
+      'title' => 'Infinity Fab Lab Module Helpers',
+      'summary' => 'Provides utility functionality which extends ProcessWire and is shared between all Infinity Fab Lab modules.',
+      'version' => 100,
+      'author' => "Thomas R Storey",
+      'autoload' => false,
+      'singular' => false,
+      'permanent' => false
+    );
+  }
+
+/**
+ * Given a path to a file, render that file to a string.
+ *
+ * @param string $file_to_render Path to the file to render.
+ * @return string
+ *
+ */
+
+ public function renderFileToString ( $file_to_render ) {
+   ob_start();
+ 	 include $file_to_render;
+ 	 return ob_get_clean();
+ }
+
+/**
+ * Given a page name and optionally a parent id and title, gets a page and
+ * returns it or creates it using the parent id (or the root id if not provided)
+ * and the title (or a capitalized version of the name if not provided).
+ *
+ * @param string $name Name of the page to retrieve or create
+ * @param string|int $parent Optional: name, path or id of parent page
+ * @param string $title Optional: title of the page
+ *
+ * @return Page
+ */
+
+  public function getFrontendPage($name, $parent, $title, $template){
+    $p = $this->wire('pages')->get("name=$name");
+    if(!$p->id){
+      if(! isset($parent) ) {
+        $parent = "/";
+      }
+      if(! isset($title) ) {
+        $title = ucwords(str_replace("_", " ", $name));
+      }
+      if(! isset($template) ) {
+        $template = "basic-page";
+      }
+      $p = new Page();
+      $p->template = $template;
+      $p->name = $name;
+      $p->title = $title;
+      $p->parent = $this->wire('pages')->get($parent);
+      $p->save();
+    }
+    return $p;
+  }
+
+  /**
+  *
+  */
+
+  public function getAdminPage($name, $process, $parent, $title){
+    $p = $this->wire('pages')->get("name=".$name);
+    if(!$p->id){
+      if(! isset($title) ){
+        $title = ucwords(str_replace("_", " ", $name));
+      }
+      if(! isset($parent) ){
+        $parent = $this->wire('pages')->get($this->wire('config')->adminRootPageID);
+      }
+      $p = new Page();
+      $p->template = "admin";
+      $p->name = $name;
+      $p->title = $title;
+      $p->process = $this->wire('modules')->get($process);
+      $p->parent = $parent;
+      $p->save();
+    }
+    $this->message("Got Admin page: ".$name." ID: ".$p->id);
+    return $p;
+  }
+
+  /**
+  *
+  */
+
+  public function getTemplate($name, $fieldsArray, $tags){
+    $t = $this->templates->get("name=".$type);
+    if(!$t->id){
+        $t = new Template();
+        $t->name = $name;
+        $t->tags = $tags;
+        $t->noChildren = 0;
+        $t->noParents = 0;
+        $t->fieldgroup = $this->getFieldgroup($name, $fieldsArray);
+        $t->save();
+    }
+    return $t;
+  }
+
+  /**
+  *
+  */
+
+  private function getFieldgroup($name, $fieldsArray){
+    $fg = $this->fieldgroups->get("name=".$name);
+    if(!$fg->id){
+        $fg = new Fieldgroup();
+        $fg->name = $name;
+        foreach ($fieldsArray as $fieldname => $data) {
+          if(isset($data['options'])){
+            $fg->append($this->getField($fieldname, $data['type'], $data['options']));
+          } else {
+            $fg->append($this->getField($fieldname, $data['type']));
+          }
+        }
+        $fg->save();
+    }
+
+    return $fg;
+  }
+
+  /**
+  * Given a name and type, retrieves a field, creating it if it does not already
+  * exist.
+  *
+  * @param string $name Name of the field.
+  * @param string $type Fieldtype of the field (see https://processwire.com/api/fieldtypes/)
+  * @param array $options Additional options used as necessary for various Fieldtypes.
+  *
+  * @return Field
+  */
+
+  public function getField($name, $type, $options){
+    $f = $this->fields->get("name=$name");
+    if(!$f->id){
+        $f = new Field();
+        $f->name = $name;
+        $f->type = $type;
+        // special configurations ======================================
+        if(!strcmp($type, "FieldtypeFile")){
+          $f->extensions = $options['extensions'];
+          $f->maxFiles = $options['maxFiles'];
+        }
+
+        if(!strcmp($type, "FieldtypePage")){
+          // required config
+          $f->parent_id = $options['parent_id'];
+          $f->inputfield = $options['inputfield'];
+          // optional config
+          $f->required = isset($options['required']) ? $options['required'] : 0;
+          $f->derefAsPage = isset($options['derefAsPage']) ? $options['derefAsPage'] : 1;
+          $f->labelFieldName = isset($options['labelFieldName']) ? $options['labelFieldName'] : 'title';
+          if(isset($options['findPagesSelector'])){
+            $f->findPagesSelector = $options['findPagesSelector'];
+          }
+          if(isset($options['template_id'])){
+            $f->template_id = $options['template_id'];
+          }
+        }
+
+        if(!strcmp($type, "FieldtypeDatetime")){
+          $formatArray = explode(" ", $options['datetimeFormat']);
+          $dateformat = $formatArray[0];
+          $timeformat = $formatArray[1]." ".$formatArray[2];
+          $f->set('dateOutputFormat', $options['datetimeFormat']);
+          $f->set('dateInputFormat', $dateformat);
+          $f->set('timeInputFormat', $timeformat);
+          $f->set('datepicker', 3);
+        }
+        // ============================================================
+
+        $f->label = ucwords(str_replace("_", " ", $name));
+        $f->tags = $options['tags'];
+        $f->save();
+    }
+    return $f;
+  }
+
+  /**
+  * Given a page name, delete the fuck out of it, no matter where it lives.
+  *
+  * @param string $name Name of the page to delete.
+  *
+  * @return bool true if page deleted, false if page not found.
+  */
+
+  public function deletePageByName($name){
+    $this->message("page name: " . $name);
+    $page = $this->wire('pages')->get("name=$name, include=all, check_access=0");
+    if($page->id){
+      $this->message("delete page: " . $page->name);
+      $this->wire('pages')->delete($page, true);
+      return true;
+    } else {
+      $this->message("page to be deleted could not be found: " . $page->name);
+      return false;
+    }
+  }
+
+  /**
+  * Given a template name, deletes all pages that have that template, if that
+  * template exists.
+  *
+  * @param string $name Name of the template whose pages to delete.
+  *
+  * @return int Number of pages deleted.
+  */
+
+  public function deletePagesByTemplate($name){
+    $pages = $this->wire('pages')->find("template=$name, include=all, check_access=0");
+    $count = 0;
+    foreach ($pages as $key => $p) {
+      $this->message("Page:" . $key . " => " . $p);
+      $this->message("delete page: " . $p->name);
+      $this->wire('pages')->delete($p, true);
+      $count++;
+    }
+    return $count;
+  }
+
+  /**
+  *
+  */
+
+  public function deleteFields($fields, $tags){
+    $count = 0;
+    foreach($fields as $key => $f){
+      $this->message("Field:" . $key . " => " . $f);
+      $field = $this->wire('fields')->get($f);
+      if($field->id && !strcmp($field->tags, $tags) && !$field->numFieldgroups()) {
+        $this->message("delete field: " . $field->name);
+        $this->wire('fields')->delete($field);
+        $count++;
+      } else {
+        $this->message("could not delete field: " . $field->name);
+      }
+    }
+    return $count;
+  }
+
+  /**
+  *
+  */
+
+  private function deletePagesByProcess($prarray){
+    $count = 0;
+    foreach ($prarray as $pname) {
+      $this->message("process page: " . $pname);
+      $id = wire('modules')->getModuleID($pname);
+      if($id){
+        $this->message("Module ID: $id");
+        $ppgs = wire("pages")->find("process=$id, include=all, check_access=0");
+        foreach ($ppgs as $key => $page) {
+          $this->message("delete process page: " . $page->name);
+          $this->wire("pages")->delete($page, true);
+          $count++;
+        }
+      }
+    }
+    return $count;
+  }
+
+  /**
+  * Given a template name, deletes the fuck out of it and the fieldgroup it rode
+  * in on.
+  *
+  * @param string $name Name of the template to delete.
+  *
+  * @return bool Returns true if the template was deleted, false if the template
+  * does not exist.
+  */
+
+  public function deleteTemplateByName($name){
+      $template = wire('templates')->get($name);
+      $fg = wire('fieldgroups')->get($name);
+      if($template->id && $fg->id){
+        $this->message("delete template: " . $template->name);
+        $this->wire("templates")->delete($template);
+        $this->message("delete fieldgroup: " . $fg->name);
+        $this->wire("fieldgroups")->delete($fg);
+        return true;
+      } else {
+        return false;
+      }
+  }
+
+  /**
+  * Given an array of arrays, extracts and returns an array of just the values
+  * which have the key $toPluck.
+  *
+  * @param array $array Array of arrays, each array having a key named $toPluck
+  * @param string $toPluck Key of the value to pluck from each array in $array
+  *
+  * @return array Flattened array.
+  */
+
+  public function pluck($array, $toPluck){
+    $out = array();
+    foreach ($array as $key => $value) {
+      if( isset($value[$toPluck]) ) {
+        $out[$key] = $value[$toPluck];
+      }
+    }
+    return $out;
+  }
+
+  /**
+  * Given two email addresses, two names, a subject and a body, sends an email.
+  *
+  * @param string $to The email address of the addressee.
+  * @param string $toName The name of the addressee.
+  * @param string $from The email address of addresser.
+  * @param string $fromName The name of the addresser.
+  * @param string $subject The email subject line.
+  * @param string $body The email body text/markup.
+  */
+
+  public function sendEmail($to, $toName, $from, $fromName, $subject, $body){
+    $mailer = wireMail();
+    $mailer->to($to, $toName)->from($from, $fromName);
+    $mailer->subject($subject)->body($body);
+    $recipients = $mailer->send();
+    return $recipients;
+  }
+
+}
+
+
+?>
