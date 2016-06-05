@@ -106,13 +106,14 @@ class FabLabModuleHelpers extends WireData implements Module {
   *
   */
 
-  public function getTemplate($name, $fieldsArray, $tags){
+  public function getTemplate($name, $fieldsArray, $tags, $options){
     $t = $this->templates->get("name=".$type);
     if(!$t->id){
         $t = new Template();
         $t->name = $name;
         $t->tags = $tags;
-        $t->noChildren = 0;
+        $t->noChildren = isset($options['noChildren']) ? $options['noChildren'] : 0;
+        $t->noSettings = isset($options['noSettings']) ? $options['noSettings'] : 0;
         $t->noParents = 0;
         $t->fieldgroup = $this->getFieldgroup($name, $fieldsArray);
         $t->save();
@@ -170,7 +171,6 @@ class FabLabModuleHelpers extends WireData implements Module {
           $f->parent_id = $options['parent_id'];
           $f->inputfield = $options['inputfield'];
           // optional config
-          $f->required = isset($options['required']) ? $options['required'] : 0;
           $f->derefAsPage = isset($options['derefAsPage']) ? $options['derefAsPage'] : 1;
           $f->labelFieldName = isset($options['labelFieldName']) ? $options['labelFieldName'] : 'title';
           if(isset($options['findPagesSelector'])){
@@ -190,8 +190,24 @@ class FabLabModuleHelpers extends WireData implements Module {
           $f->set('timeInputFormat', $timeformat);
           $f->set('datepicker', 3);
         }
-        // ============================================================
 
+        if(isset($options['flags'])){
+          $f->flags = $options['flags'];
+        }
+        if(isset($options['useRoles'])){
+          $f->useRoles = $options['useRoles'];
+        }
+        if(isset($options['viewRoles'])){
+          $f->viewRoles = $options['viewRoles'];
+        }
+        if(isset($options['editRoles'])){
+          $f->editRoles = $options['editRoles'];
+        }
+        if(isset($options['description'])){
+          $f->description = $options['description'];
+        }
+        // ============================================================
+        $f->required = isset($options['required']) ? $options['required'] : 0;
         $f->label = ucwords(str_replace("_", " ", $name));
         $f->tags = $options['tags'];
         $f->save();
