@@ -37,7 +37,10 @@ class FabLabModuleHelpers extends WireData implements Module {
  *
  */
 
- public function renderFileToString ( $file_to_render ) {
+ public function renderFileToString ( $file_to_render, $vars ) {
+   if (is_array($vars) && !empty($vars)) {
+     extract($vars);
+   }
    ob_start();
  	 include $file_to_render;
  	 return ob_get_clean();
